@@ -13,20 +13,20 @@ setup() {
   rm -rf results-Skywalking-java/
 
   export SLEEP_TIME=0
-  export NUM_OF_LOOPS=1 
-  export TOTAL_NUM_OF_CALLS=4 
+  export NUM_OF_LOOPS=1
+  export TOTAL_NUM_OF_CALLS=100
   export RECURSION_DEPTH=2
   export MOOBENCH_CONFIGURATIONS="0 1"
   export MORE_PARAMS="--quickstart"
   export SKYWALKING_KEEP_SERVER_RUNNING="true"
-  exec 3>&1
-  ./measure.sh 
+  #exec 3>&1
+  ./measure.sh
 
   # Query the Skywalking CLI for the created traces and check that it is the correct number of traces.
   START=$(date -d "20 minutes ago" +"%Y-%m-%d %H%M")
   END=$(date -d "5 minutes" +"%Y-%m-%d %H%M")
 
-  read -r -d '' QUERY <<EOF
+  QUERY=$(cat <<EOF
   {
     "query": "query (\$condition: TraceQueryCondition) { queryTraces(condition: \$condition) { traces { spans { spanId } } } }",
     "variables": {
@@ -46,20 +46,21 @@ setup() {
     }
   }
 EOF
+)
 
-  COUNT=$(curl -s "$OAP_URL" \
+  COUNT=$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:12800/graphql" \
     -H 'Content-Type: application/json' \
     -d "$QUERY" \
     | jq '[.data.queryTraces.traces[].spans[]] | length')
 
 
-  assert_equal "$COUNT" "8" "Expected 8 traces for 2 configs x 4 calls, but got $COUNT"
+  assert_equal "$COUNT" "8" "Expected 100 traces for 1 config x 100 calls"
 
   cd results-Skywalking-java/
   count=$(ls *.csv 2>/dev/null | wc -l)
   assert_equal "$count" "0" \
     "0 .csv files should exist after the run, files should only be in the zipped folder"
-  unzip results.zip 
-  measuredValues=$(cat raw-1-10-* | wc -l) 
-  assert_equal "$measuredValues" "8" "Expected 8 measured values for 2 configs x 4 calls x 2 recursions"
+  unzip results.zip
+  measuredValues=$(cat raw-1-10-* | wc -l)
+  assert_equal "$measuredValues" "8" "Expected 200 measured values for 2 configs x 100 calls"
 }

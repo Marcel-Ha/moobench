@@ -31,29 +31,36 @@ function getAgent {
 
 # Start banyandb as storage backend in a docker container and then the Skywalking APM server.
 function startSkywalkingServer {
-	docker pull apache/skywalking-banyandb:${BANYANDB_VERSION}-slim
-	docker run -d -p 17912:17912 -p 17913:17913 --name banyandb \
-		apache/skywalking-banyandb:${BANYANDB_VERSION}-slim standalone
-	sleep 10
-	cd "${BASE_DIR}/apache-skywalking-apm-bin/bin"
-	./oapService.sh &
-	SKYWALKING_PID=$!
-	cd "${BASE_DIR}"
-	if ! command -v nc > /dev/null 2>&1; then
-		echo "Missing dependency 'nc': cannot wait for SkyWalking OAP on localhost:11800" >&2
-		return 1
-	fi
+        docker pull apache/skywalking-banyandb:${BANYANDB_VERSION}-slim
+        docker run -d -p 17912:17912 -p 17913:17913 --name banyandb \
+                apache/skywalking-banyandb:${BANYANDB_VERSION}-slim standalone
+        sleep 10
+        cd "${BASE_DIR}/apache-skywalking-apm-bin/bin"
+        ./oapService.sh </dev/null > server.log 2>&1 &
+        SKYWALKING_PID=$!
+        disown "$SKYWALKING_PID" 2>/dev/null || true
 
-	local wait_seconds="${SKYWALKING_OAP_WAIT_SECONDS:-120}"
-	local elapsed=0
-	while ! nc -z localhost 11800; do
-		if [ "$elapsed" -ge "$wait_seconds" ]; then
-			echo "Timed out waiting for SkyWalking OAP on localhost:11800 after ${wait_seconds}s" >&2
-			return 1
-		fi
-		sleep 2
-		elapsed=$((elapsed + 2))
-	done
+        cd "${BASE_DIR}"
+        if ! command -v nc > /dev/null 2>&1; then
+                echo "Missing dependency 'nc': cannot wait for SkyWalking OAP on localhost:11800" >&2
+                return 1
+        fi
+
+        local wait_seconds="${SKYWALKING_OAP_WAIT_SECONDS:-120}"
+        local elapsed=0
+        while ! nc -z localhost 11800; do
+                if [ "$elapsed" -ge "$wait_seconds" ]; then
+                        echo "Timed out waiting for SkyWalking OAP on localhost:11800 after ${wait_seconds}s" >&2
+                        return 1
+                fi
+                sleep 2
+                elapsed=$((elapsed + 2))
+        done
+        sleep 5
+        ./webappService.sh </dev/null > webappserver.log 2>&1 &
+        SKYWALKING_WEB_PID=$!
+        disown "$SKYWALKING_WEB_PID" 2>/dev/null || true
+        sleep 5
 }
 
 # Stops the APM server and then the banyandb container
@@ -62,15 +69,15 @@ function stopSkywalkingServer {
       info "Keeping Skywalking server running for post-run API checks"
       return
     fi
-	if [[ -n "$SKYWALKING_PID" ]]; then
-		kill "$SKYWALKING_PID"
-		wait "$SKYWALKING_PID" 2> /dev/null
-	fi
-	# Empty the logs to avoid interference with next run
-	echo "" > "${BASE_DIR}/apache-skywalking-apm-bin/logs/skywalking-oap-server.log"
-	docker stop banyandb
-	docker rm banyandb
-	sleep 3
+        if [[ -n "$SKYWALKING_PID" ]]; then
+                kill "$SKYWALKING_PID"
+                wait "$SKYWALKING_PID" 2> /dev/null
+        fi
+        # Empty the logs to avoid interference with next run
+        echo "" > "${BASE_DIR}/apache-skywalking-apm-bin/logs/skywalking-oap-server.log"
+        docker stop banyandb
+        docker rm banyandb
+        sleep 3
 }
 
 function executeBenchmark {
