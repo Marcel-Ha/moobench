@@ -39,13 +39,29 @@ function startSkywalkingServer {
 	./oapService.sh &
 	SKYWALKING_PID=$!
 	cd "${BASE_DIR}"
+	if ! command -v nc > /dev/null 2>&1; then
+		echo "Missing dependency 'nc': cannot wait for SkyWalking OAP on localhost:11800" >&2
+		return 1
+	fi
+
+	local wait_seconds="${SKYWALKING_OAP_WAIT_SECONDS:-120}"
+	local elapsed=0
 	while ! nc -z localhost 11800; do
+		if [ "$elapsed" -ge "$wait_seconds" ]; then
+			echo "Timed out waiting for SkyWalking OAP on localhost:11800 after ${wait_seconds}s" >&2
+			return 1
+		fi
 		sleep 2
+		elapsed=$((elapsed + 2))
 	done
 }
 
 # Stops the APM server and then the banyandb container
 function stopSkywalkingServer {
+   if [ "${SKYWALKING_KEEP_SERVER_RUNNING}" = "true" ]; then
+      info "Keeping Skywalking server running for post-run API checks"
+      return
+    fi
 	if [[ -n "$SKYWALKING_PID" ]]; then
 		kill "$SKYWALKING_PID"
 		wait "$SKYWALKING_PID" 2> /dev/null
@@ -68,7 +84,7 @@ function runExperiment {
 	k=$1
 	info  " # ${i}.$RECURSION_DEPTH.${k} ${TITLE[$k]}"
 	if  [[ "$k" -gt 0 ]]; then
-		startSkywalkingServer
+		startSkywalkingServer || return 1
 	fi
 	export  SU_T_JAVA_OPTS="${SKYWALKING_CONFIG[$k]}"
 	"${MOOBENCH_BIN}" \
