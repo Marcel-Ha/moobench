@@ -14,7 +14,7 @@ setup() {
 
   export SLEEP_TIME=0
   export NUM_OF_LOOPS=1
-  export TOTAL_NUM_OF_CALLS=100
+  export TOTAL_NUM_OF_CALLS=1000
   export RECURSION_DEPTH=2
   export MOOBENCH_CONFIGURATIONS="0 1"
   export MORE_PARAMS="--quickstart"
@@ -23,8 +23,8 @@ setup() {
   ./measure.sh
 
   # Query the Skywalking CLI for the created traces and check that it is the correct number of traces.
-  START=$(date -d "20 minutes ago" +"%Y-%m-%d %H%M")
-  END=$(date -d "5 minutes" +"%Y-%m-%d %H%M")
+  START=$(date -d "120 minutes ago" +"%Y-%m-%d %H%M")
+  END=$(date -d "10 minutes" +"%Y-%m-%d %H%M")
 
   QUERY=$(cat <<EOF
   {
@@ -48,13 +48,13 @@ setup() {
 EOF
 )
 
-  COUNT=$(curl --fail --silent --show-error --max-time 10 "http://127.0.0.1:12800/graphql" \
+  COUNT=$(curl --fail --silent --show-error --max-time 20 "http://127.0.0.1:12800/graphql" \
     -H 'Content-Type: application/json' \
     -d "$QUERY" \
     | jq '[.data.queryTraces.traces[].spans[]] | length')
 
 
-  assert_equal "$COUNT" "8" "Expected 100 traces for 1 config x 100 calls"
+  assert_equal "$COUNT" "100" "Expected 100 traces for 1 config x 100 calls"
 
   cd results-Skywalking-java/
   count=$(ls *.csv 2>/dev/null | wc -l)
@@ -62,5 +62,5 @@ EOF
     "0 .csv files should exist after the run, files should only be in the zipped folder"
   unzip results.zip
   measuredValues=$(cat raw-1-10-* | wc -l)
-  assert_equal "$measuredValues" "8" "Expected 200 measured values for 2 configs x 100 calls"
+  assert_equal "$measuredValues" "200" "Expected 200 measured values for 2 configs x 100 calls"
 }
